@@ -1,0 +1,28 @@
+{
+  "name": "backend-indexer",
+  "version": "1.0.0",
+  "description": "Automated backend workflow indexing and organization tool with Google Drive integration",
+  "main": "screenshot-all-workflows.js",
+  "scripts": {
+    "capture": "node screenshot-all-workflows.js",
+    "capture-upload": "node screenshot-all-workflows-with-gdrive.js",
+    "upload": "node upload-folder-to-gdrive.js",
+    "gdrive-auth": "python push-to-gdrive/main.py auth",
+    "gdrive-status": "python push-to-gdrive/main.py status"
+  },
+  "dependencies": {
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "backend",
+    "indexer",
+    "workflow",
+    "automation",
+    "google-drive",
+    "screenshot",
+    "bubble.io"
+  ],
+  "author": "",
+  "license": "MIT"
+}

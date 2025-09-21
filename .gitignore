@@ -1,0 +1,64 @@
+# Node modules
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Google Drive OAuth credentials and tokens
+push-to-gdrive/client_secret.json
+push-to-gdrive/token.json
+push-to-gdrive/.env
+push-to-gdrive/credentials.json
+push-to-gdrive/*.json
+!push-to-gdrive/settings.json
+
+# Python
+push-to-gdrive/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Browser profiles (contains personal data)
+browser-profiles/
+
+# Screenshots and captured data
+workflow-screenshots/
+workflow-step-screenshots/
+*.png
+*.html
+workflow-analysis.json
+workflow-page-full.html
+workflow-structure.png
+
+# CSV and JSON data files
+*.csv
+*.json
+!package.json
+!package-lock.json
+!push-to-gdrive/settings.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+temp/
+tmp/
