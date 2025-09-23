@@ -222,74 +222,61 @@ class WorkflowExtractor {
             // Find workflow elements dynamically in sidebar
             console.log('\n🔍 Finding workflow elements in sidebar...');
 
-            const workflowSelectors = [
-                'div[class*="tree-item"] span:not([class*="folder"])',
-                'div[class*="workflow-item"]',
-                'span[class*="workflow-name"]',
-                'div.list-item span',
-                'div[role="treeitem"] span'
-            ];
-
             const processedUrls = new Set();
             let totalProcessed = 0;
 
-            for (const selector of workflowSelectors) {
-                const elements = await page.$$(selector);
-                console.log(`Found ${elements.length} elements with selector: ${selector}`);
+            // Use prefix patterns to find workflows (as in holy iteration)
+            const prefixes = ['core', 'CORE', 'L2', 'L3', 'daily', 'signup', 'update', 'create', 'delete'];
 
-                for (const element of elements) {
+            for (const prefix of prefixes) {
+                // Use Playwright's text selector with regex
+                const items = await page.$$(`text=/^${prefix}/`);
+                console.log(`Found ${items.length} workflows starting with "${prefix}"`);
+
+                for (const item of items) {
                     try {
-                        const text = await element.textContent();
+                        const text = await item.textContent();
+                        const box = await item.boundingBox();
 
-                        // Filter out non-workflow items
-                        if (!text || text.match(/^\d+$/) || text.includes('×')) {
-                            continue;
-                        }
+                        // Only process items in the sidebar (left side)
+                        if (box && box.x < 500) {
+                            console.log(`\n[${totalProcessed + 1}] Clicking: ${text.trim()}`);
+                            await item.click();
+                            await page.waitForTimeout(2000);
 
-                        // Check if it's in the sidebar (left side)
-                        const box = await element.boundingBox();
-                        if (!box || box.x > 500) continue;
+                            // Get the URL and extract wf_item
+                            const currentUrl = page.url();
+                            const urlObj = new URL(currentUrl);
+                            const wfItem = urlObj.searchParams.get('wf_item');
 
-                        // Skip folder names and very short/long items
-                        if (text.toLowerCase().includes('uncategorized') ||
-                            text.toLowerCase().includes('category') ||
-                            text.length < 3) {
-                            continue;
-                        }
+                            if (wfItem && !processedUrls.has(wfItem)) {
+                                processedUrls.add(wfItem);
 
-                        // Click the workflow
-                        console.log(`\n[${totalProcessed + 1}] Clicking: ${text.trim()}`);
-                        await element.click();
-                        await page.waitForTimeout(2000);
+                                // Extract workflow data
+                                const data = await this.extractWorkflowData(page);
+                                data.wf_item = wfItem;
+                                data.workflow_name = data.workflow_name || text.trim();
+                                data.extracted_at = new Date().toISOString();
+                                data.hash = crypto.createHash('sha256')
+                                    .update(JSON.stringify(data.steps))
+                                    .digest('hex')
+                                    .substring(0, 16);
 
-                        // Get the URL and extract wf_item
-                        const currentUrl = page.url();
-                        const urlObj = new URL(currentUrl);
-                        const wfItem = urlObj.searchParams.get('wf_item');
+                                results.workflows.push(data);
+                                results.total_steps += data.steps ? data.steps.length : 0;
+                                totalProcessed++;
 
-                        if (wfItem && !processedUrls.has(wfItem)) {
-                            processedUrls.add(wfItem);
-
-                            // Extract workflow data
-                            const data = await this.extractWorkflowData(page);
-                            data.wf_item = wfItem;
-                            data.workflow_name = data.workflow_name || text.trim();
-                            data.extracted_at = new Date().toISOString();
-                            data.hash = crypto.createHash('sha256')
-                                .update(JSON.stringify(data.steps))
-                                .digest('hex')
-                                .substring(0, 16);
-
-                            results.workflows.push(data);
-                            results.total_steps += data.steps ? data.steps.length : 0;
-                            totalProcessed++;
-
-                            // Save individual workflow
-                            const fileName = `${text.trim().replace(/[^a-zA-Z0-9]/g, '_')}.json`;
-                            const filePath = path.join(this.outputDir, fileName);
-                            await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-                            console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps`);
-                            console.log(`  💾 Saved: ${fileName}`);
+                                // Save individual workflow
+                                const safeName = text.trim()
+                                    .replace(/[^a-zA-Z0-9-_]/g, '_')
+                                    .replace(/_+/g, '_')
+                                    .substring(0, 50);
+                                const fileName = `${safeName}_${wfItem}.json`;
+                                const filePath = path.join(this.outputDir, fileName);
+                                await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+                                console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps`);
+                                console.log(`  💾 Saved: ${fileName}`);
+                            }
                         }
                     } catch (error) {
                         console.log(`  ❌ Error: ${error.message}`);
