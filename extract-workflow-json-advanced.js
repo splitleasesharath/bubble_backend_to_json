@@ -44,16 +44,32 @@ class AdvancedWorkflowExtractor {
         const stepDetails = {
             title: '',
             action_type: '',
+            step_number: '',
             configuration: {},
             fields: [],
             conditions: null
         };
 
         try {
-            // Get basic info from the card
+            // Get step number (e.g., "Step 1")
+            const stepLabel = await actionCard.$('span._1nfonn87._1lkv1fw9._1lkv1fwe._1ij2r33');
+            if (stepLabel) {
+                stepDetails.step_number = await stepLabel.textContent();
+            }
+
+            // Get action title from the specific class pattern
             const titleElement = await actionCard.$('span._1nfonn87._1lkv1fwa._1lkv1fwe._1ij2r31');
             if (titleElement) {
                 stepDetails.title = await titleElement.textContent();
+            }
+
+            // Get condition text if present
+            const conditionElement = await actionCard.$('span._1nfonn87._1lkv1fwa._1lkv1fwc._1ij2r33');
+            if (conditionElement) {
+                const conditionText = await conditionElement.textContent();
+                if (conditionText && conditionText.startsWith('Only when')) {
+                    stepDetails.conditions = conditionText.replace('Only when ', '');
+                }
             }
 
             // Click the action card to open property panel
@@ -193,7 +209,7 @@ class AdvancedWorkflowExtractor {
     }
 
     async extractWorkflowWithDetails(page) {
-        console.log('  Extracting workflow with detailed steps (clicking each one)...');
+        console.log('  Extracting workflow with detailed steps (clicking each one chronologically)...');
 
         const workflowData = {
             workflow_name: '',
@@ -201,16 +217,30 @@ class AdvancedWorkflowExtractor {
             steps: []
         };
 
-        // Wait for workflow to be fully loaded
-        await page.waitForTimeout(1000);
+        // Wait longer for workflow to be fully loaded
+        await page.waitForTimeout(3000);
+
+        // First, wait for the workflow canvas to have content
+        try {
+            await page.waitForSelector('[data-name="EventCard"], [data-name="ActionCard"]', {
+                timeout: 10000
+            });
+        } catch (e) {
+            console.log('    ⚠️ No workflow cards found after waiting 10 seconds');
+            return workflowData;
+        }
 
         // Get the trigger/event card
         const eventCard = await page.$('[data-name="EventCard"]');
         if (eventCard) {
             console.log('    Processing trigger/event card...');
 
-            // Get event name
-            const eventText = await eventCard.$('span._1nfonn87._1lkv1fwa._1ij2r31');
+            // Get event type (e.g., "API Event")
+            const eventType = await eventCard.$('span._1nfonn87._1lkv1fw9._1lkv1fwe._1ij2r33');
+            const eventTypeText = eventType ? await eventType.textContent() : 'Event';
+
+            // Get event/workflow name from the specific class
+            const eventText = await eventCard.$('span._1nfonn87._1lkv1fwa._1ij2r31._1lkv1fwe');
             if (eventText) {
                 workflowData.workflow_name = (await eventText.textContent()).trim().replace(' is called', '');
             }
@@ -280,25 +310,48 @@ class AdvancedWorkflowExtractor {
             workflowData.steps.push(triggerStep);
         }
 
-        // Get all action cards
-        const actionCards = await page.$$('[data-name="ActionCard"]');
-        console.log(`    Found ${actionCards.length} action steps to click and extract`);
+        // Get all action cards chronologically
+        let actionCards = await page.$$('[data-name="ActionCard"]');
+        console.log(`    Found ${actionCards.length} action steps to click and extract chronologically`);
+
+        if (actionCards.length === 0 && eventCard) {
+            console.log('    ⚠️ Warning: No action cards found, but event card exists');
+        }
 
         let stepOrder = workflowData.steps.length + 1;
+
+        // Process each action card in chronological order
         for (let i = 0; i < actionCards.length; i++) {
-            console.log(`    Processing action ${i + 1}/${actionCards.length}...`);
-            const stepDetails = await this.extractStepDetails(page, actionCards[i]);
+            console.log(`    Processing action ${i + 1}/${actionCards.length} chronologically...`);
 
-            const step = {
-                order: stepOrder++,
-                action: stepDetails.title || `Step ${stepOrder - 1}`,
-                ...stepDetails
-            };
+            // Re-query action cards each time in case DOM changes after clicking
+            actionCards = await page.$$('[data-name="ActionCard"]');
+            if (i >= actionCards.length) {
+                console.log('      Action card no longer available after DOM change, skipping...');
+                break;
+            }
 
-            workflowData.steps.push(step);
+            try {
+                const stepDetails = await this.extractStepDetails(page, actionCards[i]);
+
+                const step = {
+                    order: stepOrder++,
+                    action: stepDetails.title || `Step ${stepOrder - 1}`,
+                    ...stepDetails
+                };
+
+                workflowData.steps.push(step);
+            } catch (error) {
+                console.log(`      Error extracting action ${i + 1}: ${error.message}`);
+            }
 
             // Small delay between clicking steps
             await page.waitForTimeout(500);
+        }
+
+        // Log if no steps were extracted despite having cards
+        if (workflowData.steps.length === 0 && (eventCard || actionCards.length > 0)) {
+            console.log('    ⚠️ ERROR: Workflow has cards but NO steps were extracted!');
         }
 
         return workflowData;
@@ -327,7 +380,7 @@ class AdvancedWorkflowExtractor {
                 total_steps: 0
             };
 
-            const maxWorkflows = 5; // Limit for testing
+            const maxWorkflows = 50; // Process more workflows to test robustness
 
             // Use text selectors with regex patterns to find workflows
             const prefixes = ['core', 'CORE', 'L2', 'L3'];
@@ -359,10 +412,15 @@ class AdvancedWorkflowExtractor {
                             if (wfItem && !processedUrls.has(wfItem)) {
                                 processedUrls.add(wfItem);
 
-                                // Wait for workflow content to be ready
-                                await page.waitForSelector('[data-name="EventCard"], [data-name="ActionCard"]', {
-                                    timeout: 5000
-                                }).catch(() => console.log('  ⚠️ No cards found, skipping...'));
+                                // Wait longer for workflow content to be ready
+                                try {
+                                    await page.waitForSelector('[data-name="EventCard"], [data-name="ActionCard"]', {
+                                        timeout: 8000
+                                    });
+                                } catch (e) {
+                                    console.log('  ⚠️ No cards found after waiting, checking if page crashed...');
+                                    // Try to continue anyway in case cards appear later
+                                }
 
                                 // Extract workflow with detailed steps by clicking each one
                                 const data = await this.extractWorkflowWithDetails(page);
