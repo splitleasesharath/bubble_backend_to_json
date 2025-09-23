@@ -5,7 +5,8 @@ const fs = require('fs').promises;
 class StateManager {
     constructor(profileName = 'default') {
         this.profileName = profileName;
-        this.profilePath = path.join(__dirname, '..', 'browser-profiles', profileName);
+        // Use existing Chrome profile with Bubble.io session
+        this.profilePath = 'C:\\Users\\Split Lease\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 1';
         this.configPath = path.join(this.profilePath, 'config.json');
         this.config = {
             headless: false,

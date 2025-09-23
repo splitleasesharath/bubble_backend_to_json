@@ -6,6 +6,8 @@
   "scripts": {
     "capture": "node screenshot-all-workflows.js",
     "capture-upload": "node screenshot-all-workflows-with-gdrive.js",
+    "capture-json": "node capture-workflows-json.js",
+    "test-json": "node test-json-extraction.js",
     "upload": "node upload-folder-to-gdrive.js",
     "gdrive-auth": "python push-to-gdrive/main.py auth",
     "gdrive-status": "python push-to-gdrive/main.py status"

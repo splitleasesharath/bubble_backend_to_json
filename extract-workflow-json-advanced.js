@@ -57,9 +57,9 @@ class AdvancedWorkflowExtractor {
             }
 
             // Click the action card to open property panel
-            console.log(`    Clicking step: ${stepDetails.title}`);
+            console.log(`      Clicking step: ${stepDetails.title || 'Unknown Step'}`);
             await actionCard.click();
-            await page.waitForTimeout(1500); // Wait for property panel to open
+            await page.waitForTimeout(2000); // Wait longer for property panel to open
 
             // Find the property editor panel for this step
             const actionId = await actionCard.getAttribute('data-id');
@@ -193,7 +193,7 @@ class AdvancedWorkflowExtractor {
     }
 
     async extractWorkflowWithDetails(page) {
-        console.log('  Extracting workflow with detailed steps...');
+        console.log('  Extracting workflow with detailed steps (clicking each one)...');
 
         const workflowData = {
             workflow_name: '',
@@ -201,10 +201,13 @@ class AdvancedWorkflowExtractor {
             steps: []
         };
 
+        // Wait for workflow to be fully loaded
+        await page.waitForTimeout(1000);
+
         // Get the trigger/event card
         const eventCard = await page.$('[data-name="EventCard"]');
         if (eventCard) {
-            console.log('    Processing trigger/event...');
+            console.log('    Processing trigger/event card...');
 
             // Get event name
             const eventText = await eventCard.$('span._1nfonn87._1lkv1fwa._1ij2r31');
@@ -213,8 +216,9 @@ class AdvancedWorkflowExtractor {
             }
 
             // Click to open event properties
+            console.log('      Clicking event card to open properties...');
             await eventCard.click();
-            await page.waitForTimeout(1500);
+            await page.waitForTimeout(2000);
 
             // Extract trigger configuration
             const eventId = await eventCard.getAttribute('data-id');
@@ -278,11 +282,12 @@ class AdvancedWorkflowExtractor {
 
         // Get all action cards
         const actionCards = await page.$$('[data-name="ActionCard"]');
-        console.log(`    Found ${actionCards.length} action steps`);
+        console.log(`    Found ${actionCards.length} action steps to click and extract`);
 
         let stepOrder = workflowData.steps.length + 1;
-        for (const actionCard of actionCards) {
-            const stepDetails = await this.extractStepDetails(page, actionCard);
+        for (let i = 0; i < actionCards.length; i++) {
+            console.log(`    Processing action ${i + 1}/${actionCards.length}...`);
+            const stepDetails = await this.extractStepDetails(page, actionCards[i]);
 
             const step = {
                 order: stepOrder++,
@@ -291,6 +296,9 @@ class AdvancedWorkflowExtractor {
             };
 
             workflowData.steps.push(step);
+
+            // Small delay between clicking steps
+            await page.waitForTimeout(500);
         }
 
         return workflowData;
@@ -309,7 +317,7 @@ class AdvancedWorkflowExtractor {
 
             await this.expandAllFolders(page);
 
-            console.log('\n🔍 Finding workflow elements in sidebar...');
+            console.log('\n🔍 Finding workflow elements in sidebar using dynamic clicking...');
 
             const processedUrls = new Set();
             let totalProcessed = 0;
@@ -319,13 +327,15 @@ class AdvancedWorkflowExtractor {
                 total_steps: 0
             };
 
-            // Use prefix patterns to find workflows
-            const prefixes = ['core', 'CORE', 'L2', 'L3'];
             const maxWorkflows = 5; // Limit for testing
+
+            // Use text selectors with regex patterns to find workflows
+            const prefixes = ['core', 'CORE', 'L2', 'L3'];
 
             for (const prefix of prefixes) {
                 if (totalProcessed >= maxWorkflows) break;
 
+                // Use Playwright's text selector with regex (same as v2)
                 const items = await page.$$(`text=/^${prefix}/`);
                 console.log(`Found ${items.length} workflows starting with "${prefix}"`);
 
@@ -336,10 +346,11 @@ class AdvancedWorkflowExtractor {
                         const text = await item.textContent();
                         const box = await item.boundingBox();
 
+                        // Only process items in the sidebar (left side)
                         if (box && box.x < 500) {
                             console.log(`\n[${totalProcessed + 1}] Clicking workflow: ${text.trim()}`);
                             await item.click();
-                            await page.waitForTimeout(2000);
+                            await page.waitForTimeout(3000); // Wait for workflow to load
 
                             const currentUrl = page.url();
                             const urlObj = new URL(currentUrl);
@@ -348,7 +359,12 @@ class AdvancedWorkflowExtractor {
                             if (wfItem && !processedUrls.has(wfItem)) {
                                 processedUrls.add(wfItem);
 
-                                // Extract workflow with detailed steps
+                                // Wait for workflow content to be ready
+                                await page.waitForSelector('[data-name="EventCard"], [data-name="ActionCard"]', {
+                                    timeout: 5000
+                                }).catch(() => console.log('  ⚠️ No cards found, skipping...'));
+
+                                // Extract workflow with detailed steps by clicking each one
                                 const data = await this.extractWorkflowWithDetails(page);
                                 data.wf_item = wfItem;
                                 data.workflow_name = data.workflow_name || text.trim();
@@ -366,10 +382,10 @@ class AdvancedWorkflowExtractor {
                                 const safeName = text.trim()
                                     .replace(/[^a-zA-Z0-9-_]/g, '_')
                                     .substring(0, 50);
-                                const fileName = `${safeName}_${wfItem}.json`;
+                                const fileName = `${safeName}_${wfItem}_advanced.json`;
                                 const filePath = path.join(this.outputDir, fileName);
                                 await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-                                console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps with details`);
+                                console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps with detailed configs`);
                                 console.log(`  💾 Saved: ${fileName}`);
                             }
                         }
