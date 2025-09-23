@@ -242,14 +242,20 @@ class WorkflowExtractor {
                         const text = await element.textContent();
 
                         // Filter out non-workflow items
-                        if (!text || text.match(/^\d+$/) || text.includes('×') ||
-                            text.includes('folder') || text.length < 3 || text.length > 100) {
+                        if (!text || text.match(/^\d+$/) || text.includes('×')) {
                             continue;
                         }
 
                         // Check if it's in the sidebar (left side)
                         const box = await element.boundingBox();
                         if (!box || box.x > 500) continue;
+
+                        // Skip folder names and very short/long items
+                        if (text.toLowerCase().includes('uncategorized') ||
+                            text.toLowerCase().includes('category') ||
+                            text.length < 3) {
+                            continue;
+                        }
 
                         // Click the workflow
                         console.log(`\n[${totalProcessed + 1}] Clicking: ${text.trim()}`);
