@@ -163,40 +163,37 @@ class WorkflowExtractor {
         return workflowData;
     }
 
-    async processWorkflow(page, workflowName, wfItem) {
-        console.log(`\nProcessing workflow: ${workflowName}`);
 
-        try {
-            // Navigate to workflow
-            const url = BROWSER_CONFIG.urls.workflowUrl(wfItem);
-            console.log(`Navigating to: ${url}`);
-            await page.goto(url, { waitUntil: 'domcontentloaded' });
+    async expandAllFolders(page) {
+        console.log('\n📂 Expanding all folders...');
 
-            // Wait for content to load
-            await page.waitForTimeout(5000);
+        // Find all expand buttons
+        const expandButtons = await page.$$('div[role="button"] svg');
+        console.log(`Found ${expandButtons.length} expand buttons`);
 
-            // Extract workflow data
-            const workflowData = await this.extractWorkflowData(page);
-
-            // Add metadata
-            workflowData.wf_item = wfItem;
-            workflowData.extracted_at = new Date().toISOString();
-            workflowData.hash = crypto.createHash('sha256')
-                .update(JSON.stringify(workflowData.steps))
-                .digest('hex')
-                .substring(0, 16);
-
-            return workflowData;
-        } catch (error) {
-            console.error(`Error processing workflow ${workflowName}:`, error.message);
-            return {
-                workflow_name: workflowName,
-                wf_item: wfItem,
-                error: error.message,
-                extracted_at: new Date().toISOString(),
-                steps: []
-            };
+        // Expand all folders (skip first if Uncategorized is already open)
+        for (let i = 1; i < expandButtons.length && i < 30; i++) {
+            try {
+                await expandButtons[i].click();
+                await page.waitForTimeout(200);
+                console.log(`  ✓ Expanded folder ${i}`);
+            } catch (err) {
+                // Continue
+            }
         }
+
+        // Ensure Uncategorized is expanded
+        if (expandButtons.length > 0) {
+            try {
+                await expandButtons[0].click();
+                await page.waitForTimeout(200);
+                console.log('  ✓ Ensured Uncategorized is expanded');
+            } catch (err) {
+                // Already expanded
+            }
+        }
+
+        await page.waitForTimeout(2000);
     }
 
     async run() {
@@ -206,43 +203,91 @@ class WorkflowExtractor {
             // Create output directory
             await fs.mkdir(this.outputDir, { recursive: true });
 
-            // IMPORTANT: Navigate to base URL first to ensure session is active
+            // Navigate to base URL first to ensure session is active
             console.log('Navigating to Bubble.io editor...');
             await page.goto(BROWSER_CONFIG.urls.baseUrl, { waitUntil: 'domcontentloaded' });
             await page.waitForTimeout(5000);
             console.log('Editor loaded with active session');
 
-            // Load workflow list
-            const workflowListPath = path.join(__dirname, 'workflow-ids-final.json');
-            const workflowList = JSON.parse(await fs.readFile(workflowListPath, 'utf-8'));
-            console.log(`Loaded ${workflowList.length} workflows`);
+            // Expand all folders to see all workflows
+            await this.expandAllFolders(page);
 
-            // Process all workflows
-            const testWorkflows = workflowList;
+            // Process workflows dynamically from sidebar
             const results = {
                 workflows: [],
                 extracted_at: new Date().toISOString(),
                 total_steps: 0
             };
 
-            for (let i = 0; i < testWorkflows.length; i++) {
-                const workflow = testWorkflows[i];
-                console.log(`\n[${i + 1}/${testWorkflows.length}] Processing...`);
+            // Find workflow elements dynamically in sidebar
+            console.log('\n🔍 Finding workflow elements in sidebar...');
 
-                const data = await this.processWorkflow(page, workflow.name, workflow.wf_item);
-                results.workflows.push(data);
-                results.total_steps += data.steps ? data.steps.length : 0;
+            const workflowSelectors = [
+                'div[class*="tree-item"] span:not([class*="folder"])',
+                'div[class*="workflow-item"]',
+                'span[class*="workflow-name"]',
+                'div.list-item span',
+                'div[role="treeitem"] span'
+            ];
 
-                // Save individual workflow
-                const fileName = `${workflow.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
-                const filePath = path.join(this.outputDir, fileName);
-                await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-                console.log(`  Saved: ${fileName}`);
-                console.log(`  Steps extracted: ${data.steps ? data.steps.length : 0}`);
+            const processedUrls = new Set();
+            let totalProcessed = 0;
 
-                // Add small delay between workflows to avoid overwhelming the browser
-                if (i < testWorkflows.length - 1) {
-                    await page.waitForTimeout(1000);
+            for (const selector of workflowSelectors) {
+                const elements = await page.$$(selector);
+                console.log(`Found ${elements.length} elements with selector: ${selector}`);
+
+                for (const element of elements) {
+                    try {
+                        const text = await element.textContent();
+
+                        // Filter out non-workflow items
+                        if (!text || text.match(/^\d+$/) || text.includes('×') ||
+                            text.includes('folder') || text.length < 3 || text.length > 100) {
+                            continue;
+                        }
+
+                        // Check if it's in the sidebar (left side)
+                        const box = await element.boundingBox();
+                        if (!box || box.x > 500) continue;
+
+                        // Click the workflow
+                        console.log(`\n[${totalProcessed + 1}] Clicking: ${text.trim()}`);
+                        await element.click();
+                        await page.waitForTimeout(2000);
+
+                        // Get the URL and extract wf_item
+                        const currentUrl = page.url();
+                        const urlObj = new URL(currentUrl);
+                        const wfItem = urlObj.searchParams.get('wf_item');
+
+                        if (wfItem && !processedUrls.has(wfItem)) {
+                            processedUrls.add(wfItem);
+
+                            // Extract workflow data
+                            const data = await this.extractWorkflowData(page);
+                            data.wf_item = wfItem;
+                            data.workflow_name = data.workflow_name || text.trim();
+                            data.extracted_at = new Date().toISOString();
+                            data.hash = crypto.createHash('sha256')
+                                .update(JSON.stringify(data.steps))
+                                .digest('hex')
+                                .substring(0, 16);
+
+                            results.workflows.push(data);
+                            results.total_steps += data.steps ? data.steps.length : 0;
+                            totalProcessed++;
+
+                            // Save individual workflow
+                            const fileName = `${text.trim().replace(/[^a-zA-Z0-9]/g, '_')}.json`;
+                            const filePath = path.join(this.outputDir, fileName);
+                            await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+                            console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps`);
+                            console.log(`  💾 Saved: ${fileName}`);
+                        }
+                    } catch (error) {
+                        console.log(`  ❌ Error: ${error.message}`);
+                    }
                 }
             }
 
@@ -250,8 +295,8 @@ class WorkflowExtractor {
             const combinedPath = path.join(this.outputDir, 'combined-workflows.json');
             await fs.writeFile(combinedPath, JSON.stringify(results, null, 2));
 
-            console.log('\n=== Extraction Complete ===');
-            console.log(`Total workflows: ${results.workflows.length}`);
+            console.log('\n=== Dynamic Extraction Complete ===');
+            console.log(`Total workflows found & processed: ${results.workflows.length}`);
             console.log(`Total steps extracted: ${results.total_steps}`);
             console.log(`Output directory: ${this.outputDir}`);
 
