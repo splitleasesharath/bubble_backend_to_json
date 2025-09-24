@@ -210,6 +210,11 @@ class DropdownWorkflowExtractor {
             await eventCard.click();
             await page.waitForTimeout(2000);
 
+            // Capture the wf_item from URL after clicking the event
+            const eventUrl = page.url();
+            const eventUrlObj = new URL(eventUrl);
+            const eventWfItem = eventUrlObj.searchParams.get('wf_item');
+
             // Extract trigger configuration
             const eventId = await eventCard.getAttribute('data-id');
             let eventPanel = null;
@@ -224,6 +229,7 @@ class DropdownWorkflowExtractor {
             const triggerStep = {
                 order: 1,
                 action: `API Event: ${workflowData.workflow_name} is called`,
+                wf_item: eventWfItem,  // Add wf_item for the trigger
                 context: {}
             };
 
@@ -328,6 +334,7 @@ class DropdownWorkflowExtractor {
             title: '',
             action_type: '',
             step_number: '',
+            wf_item: null,  // Add wf_item for the step
             configuration: {},
             fields: [],
             conditions: null
@@ -359,6 +366,15 @@ class DropdownWorkflowExtractor {
             console.log(`      Clicking step: ${stepDetails.title || 'Unknown Step'}`);
             await actionCard.click();
             await page.waitForTimeout(2000); // Wait longer for property panel to open
+
+            // Capture the wf_item from URL after clicking the step
+            const currentUrl = page.url();
+            const urlObj = new URL(currentUrl);
+            stepDetails.wf_item = urlObj.searchParams.get('wf_item');
+
+            if (stepDetails.wf_item) {
+                console.log(`        Captured wf_item: ${stepDetails.wf_item}`);
+            }
 
             // Find the property editor panel for this step
             const actionId = await actionCard.getAttribute('data-id');
