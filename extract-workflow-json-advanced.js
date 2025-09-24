@@ -383,33 +383,36 @@ class AdvancedWorkflowExtractor {
             // No limit - process ALL workflows chronologically
             const maxWorkflows = Infinity; // Process all workflows found
 
-            // Find ALL workflows in sidebar chronologically (not just specific prefixes)
-            console.log('Finding ALL workflows in sidebar chronologically...');
+            // Use a simpler approach - click on workflow names we can identify
+            console.log('Finding workflows in sidebar...');
 
-            // Get all treeitem spans that could be workflows
-            const allItems = await page.$$('div[role="treeitem"] span');
-            console.log(`Found ${allItems.length} total items in sidebar`);
+            // Get all clickable text elements in the sidebar
+            const sidebarElements = await page.$$('div[role="treeitem"] span, div.list-item span');
+            console.log(`Found ${sidebarElements.length} potential workflow elements`);
 
-            // Process each item to determine if it's a workflow
-            for (const item of allItems) {
+            for (const element of sidebarElements) {
                 try {
-                    const text = await item.textContent();
-                    const box = await item.boundingBox();
+                    const text = await element.textContent();
+                    const box = await element.boundingBox();
 
-                    // Filter out non-workflow items
-                    if (!text ||
-                        text.match(/^\d+$/) || // Just numbers
-                        text.includes('×') || // Count indicators
-                        text === 'Uncategorized' || // Exact folder name only
-                        text.length < 3 || // Too short
-                        !box ||
-                        box.x > 500) { // Not in sidebar
-                        continue;
-                    }
+                    // Skip if no text or position
+                    if (!text || !box) continue;
 
-                    // This appears to be a workflow - process it
-                    console.log(`\n[${totalProcessed + 1}] Clicking workflow: ${text.trim()}`);
-                    await item.click();
+                    // Skip if not in sidebar area
+                    if (box.x > 400) continue;
+
+                    // Skip folder indicators and numbers
+                    if (text.match(/^\d+$/) || text.includes('×')) continue;
+
+                    // Skip if too short to be a workflow name
+                    if (text.length < 5) continue;
+
+                    // Skip exact folder names
+                    if (text === 'Uncategorized' || text === 'Categories') continue;
+
+                    // This looks like a workflow - try clicking it
+                    console.log(`\n[${totalProcessed + 1}] Trying workflow: ${text.trim()}`);
+                    await element.click();
                     await page.waitForTimeout(3000); // Wait for workflow to load
 
                     const currentUrl = page.url();
