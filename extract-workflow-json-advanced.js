@@ -380,76 +380,82 @@ class AdvancedWorkflowExtractor {
                 total_steps: 0
             };
 
-            const maxWorkflows = 50; // Process more workflows to test robustness
+            // No limit - process ALL workflows chronologically
+            const maxWorkflows = Infinity; // Process all workflows found
 
-            // Use text selectors with regex patterns to find workflows
-            const prefixes = ['core', 'CORE', 'L2', 'L3'];
+            // Find ALL workflows in sidebar chronologically (not just specific prefixes)
+            console.log('Finding ALL workflows in sidebar chronologically...');
 
-            for (const prefix of prefixes) {
-                if (totalProcessed >= maxWorkflows) break;
+            // Get all treeitem spans that could be workflows
+            const allItems = await page.$$('div[role="treeitem"] span');
+            console.log(`Found ${allItems.length} total items in sidebar`);
 
-                // Use Playwright's text selector with regex (same as v2)
-                const items = await page.$$(`text=/^${prefix}/`);
-                console.log(`Found ${items.length} workflows starting with "${prefix}"`);
+            // Process each item to determine if it's a workflow
+            for (const item of allItems) {
+                try {
+                    const text = await item.textContent();
+                    const box = await item.boundingBox();
 
-                for (const item of items) {
-                    if (totalProcessed >= maxWorkflows) break;
-
-                    try {
-                        const text = await item.textContent();
-                        const box = await item.boundingBox();
-
-                        // Only process items in the sidebar (left side)
-                        if (box && box.x < 500) {
-                            console.log(`\n[${totalProcessed + 1}] Clicking workflow: ${text.trim()}`);
-                            await item.click();
-                            await page.waitForTimeout(3000); // Wait for workflow to load
-
-                            const currentUrl = page.url();
-                            const urlObj = new URL(currentUrl);
-                            const wfItem = urlObj.searchParams.get('wf_item');
-
-                            if (wfItem && !processedUrls.has(wfItem)) {
-                                processedUrls.add(wfItem);
-
-                                // Wait longer for workflow content to be ready
-                                try {
-                                    await page.waitForSelector('[data-name="EventCard"], [data-name="ActionCard"]', {
-                                        timeout: 8000
-                                    });
-                                } catch (e) {
-                                    console.log('  ⚠️ No cards found after waiting, checking if page crashed...');
-                                    // Try to continue anyway in case cards appear later
-                                }
-
-                                // Extract workflow with detailed steps by clicking each one
-                                const data = await this.extractWorkflowWithDetails(page);
-                                data.wf_item = wfItem;
-                                data.workflow_name = data.workflow_name || text.trim();
-                                data.extracted_at = new Date().toISOString();
-                                data.hash = crypto.createHash('sha256')
-                                    .update(JSON.stringify(data.steps))
-                                    .digest('hex')
-                                    .substring(0, 16);
-
-                                results.workflows.push(data);
-                                results.total_steps += data.steps ? data.steps.length : 0;
-                                totalProcessed++;
-
-                                // Save individual workflow
-                                const safeName = text.trim()
-                                    .replace(/[^a-zA-Z0-9-_]/g, '_')
-                                    .substring(0, 50);
-                                const fileName = `${safeName}_${wfItem}_advanced.json`;
-                                const filePath = path.join(this.outputDir, fileName);
-                                await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-                                console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps with detailed configs`);
-                                console.log(`  💾 Saved: ${fileName}`);
-                            }
-                        }
-                    } catch (error) {
-                        console.log(`  ❌ Error: ${error.message}`);
+                    // Filter out non-workflow items
+                    if (!text ||
+                        text.match(/^\d+$/) || // Just numbers
+                        text.includes('×') || // Count indicators
+                        text.toLowerCase().includes('uncategorized') || // Folder names
+                        text.toLowerCase().includes('category') || // Category names
+                        text.length < 3 || // Too short
+                        !box ||
+                        box.x > 500) { // Not in sidebar
+                        continue;
                     }
+
+                    // This appears to be a workflow - process it
+                    console.log(`\n[${totalProcessed + 1}] Clicking workflow: ${text.trim()}`);
+                    await item.click();
+                    await page.waitForTimeout(3000); // Wait for workflow to load
+
+                    const currentUrl = page.url();
+                    const urlObj = new URL(currentUrl);
+                    const wfItem = urlObj.searchParams.get('wf_item');
+
+                    if (wfItem && !processedUrls.has(wfItem)) {
+                        processedUrls.add(wfItem);
+
+                        // Wait longer for workflow content to be ready
+                        try {
+                            await page.waitForSelector('[data-name="EventCard"], [data-name="ActionCard"]', {
+                                timeout: 8000
+                            });
+                        } catch (e) {
+                            console.log('  ⚠️ No cards found after waiting, checking if page crashed...');
+                            // Try to continue anyway in case cards appear later
+                        }
+
+                        // Extract workflow with detailed steps by clicking each one
+                        const data = await this.extractWorkflowWithDetails(page);
+                        data.wf_item = wfItem;
+                        data.workflow_name = data.workflow_name || text.trim();
+                        data.extracted_at = new Date().toISOString();
+                        data.hash = crypto.createHash('sha256')
+                            .update(JSON.stringify(data.steps))
+                            .digest('hex')
+                            .substring(0, 16);
+
+                        results.workflows.push(data);
+                        results.total_steps += data.steps ? data.steps.length : 0;
+                        totalProcessed++;
+
+                        // Save individual workflow
+                        const safeName = text.trim()
+                            .replace(/[^a-zA-Z0-9-_]/g, '_')
+                            .substring(0, 50);
+                        const fileName = `${safeName}_${wfItem}_advanced.json`;
+                        const filePath = path.join(this.outputDir, fileName);
+                        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+                        console.log(`  ✅ Extracted: ${data.steps ? data.steps.length : 0} steps with detailed configs`);
+                        console.log(`  💾 Saved: ${fileName}`);
+                    }
+                } catch (error) {
+                    console.log(`  ❌ Error: ${error.message}`);
                 }
             }
 
