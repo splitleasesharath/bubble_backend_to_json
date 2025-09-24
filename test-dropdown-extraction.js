@@ -24,6 +24,7 @@ async function testDropdownExtraction() {
         try {
             await fs.mkdir(this.outputDir, { recursive: true });
 
+            console.log(`\n📁 Test output directory: ${path.basename(this.outputDir)}`);
             console.log('Navigating to Bubble.io editor...');
             await page.goto(BROWSER_CONFIG.urls.baseUrl, { waitUntil: 'domcontentloaded' });
             await page.waitForTimeout(5000);

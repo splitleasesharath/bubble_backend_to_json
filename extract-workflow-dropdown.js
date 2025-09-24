@@ -10,9 +10,12 @@ const crypto = require('crypto');
 
 class DropdownWorkflowExtractor {
     constructor() {
-        this.outputDir = path.join(__dirname, 'extracted-workflows-dropdown');
+        // Create timestamped directory for this run
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        this.outputDir = path.join(__dirname, 'extracted-workflows-dropdown', `run-${timestamp}`);
         this.workflows = [];
         this.dropdownStructure = [];
+        this.timestamp = timestamp;
     }
 
     async openWorkflowDropdown(page) {
@@ -513,6 +516,7 @@ class DropdownWorkflowExtractor {
         try {
             await fs.mkdir(this.outputDir, { recursive: true });
 
+            console.log(`\n📁 Creating output directory: ${path.basename(this.outputDir)}`);
             console.log('Navigating to Bubble.io editor...');
             await page.goto(BROWSER_CONFIG.urls.baseUrl, { waitUntil: 'domcontentloaded' });
             await page.waitForTimeout(5000);
@@ -585,9 +589,32 @@ class DropdownWorkflowExtractor {
             const structurePath = path.join(this.outputDir, 'dropdown-structure.json');
             await fs.writeFile(structurePath, JSON.stringify(this.dropdownStructure, null, 2));
 
+            // Save run summary with metadata
+            const summary = {
+                run_timestamp: this.timestamp,
+                run_directory: path.basename(this.outputDir),
+                extraction_started: results.extracted_at,
+                extraction_completed: new Date().toISOString(),
+                total_workflows_found: workflows.length,
+                total_workflows_processed: results.workflows.length,
+                total_steps_extracted: results.total_steps,
+                average_steps_per_workflow: results.workflows.length > 0
+                    ? (results.total_steps / results.workflows.length).toFixed(2)
+                    : 0,
+                workflows_summary: results.workflows.map(w => ({
+                    name: w.workflow_name,
+                    steps: w.steps.length,
+                    wf_item: w.wf_item
+                }))
+            };
+
+            const summaryPath = path.join(this.outputDir, 'RUN_SUMMARY.json');
+            await fs.writeFile(summaryPath, JSON.stringify(summary, null, 2));
+
             console.log('\n=== Dropdown Extraction Complete ===');
             console.log(`Total workflows processed: ${results.workflows.length}`);
             console.log(`Total steps extracted: ${results.total_steps}`);
+            console.log(`Timestamp: ${this.timestamp}`);
             console.log(`Output directory: ${this.outputDir}`);
 
         } catch (error) {
