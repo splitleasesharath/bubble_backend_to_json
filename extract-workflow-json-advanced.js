@@ -400,8 +400,7 @@ class AdvancedWorkflowExtractor {
                     if (!text ||
                         text.match(/^\d+$/) || // Just numbers
                         text.includes('×') || // Count indicators
-                        text.toLowerCase().includes('uncategorized') || // Folder names
-                        text.toLowerCase().includes('category') || // Category names
+                        text === 'Uncategorized' || // Exact folder name only
                         text.length < 3 || // Too short
                         !box ||
                         box.x > 500) { // Not in sidebar
