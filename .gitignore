@@ -64,6 +64,8 @@ logs/
 .env
 .env.local
 .env.*.local
+github-logger/.env
+github-logger/config.json
 
 # Temporary files
 *.tmp
