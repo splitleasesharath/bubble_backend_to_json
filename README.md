@@ -132,29 +132,6 @@ START_INDEX=5 MAX_WORKFLOWS=10 node extract-workflow-dropdown.js
 node test-dropdown-extraction.js
 ```
 
-### Advanced JSON Extraction
-
-Extract with detailed property panel analysis:
-
-```bash
-# Run advanced extraction
-node extract-workflow-json-advanced.js
-
-# With custom parameters
-MAX_WORKFLOWS=20 node extract-workflow-json-advanced.js
-```
-
-### Batch Processing
-
-Process multiple workflows in batches:
-
-```bash
-# Process all workflows in batches
-node extract-workflows-batch.js
-
-# Custom batch size
-BATCH_SIZE=10 node extract-workflows-batch.js
-```
 
 ### Upload to Google Drive
 
@@ -216,9 +193,7 @@ backend-indexer-json/
 
 ### Main Extraction Scripts
 
-- `extract-workflow-dropdown.js` - Primary dropdown-based extractor
-- `extract-workflow-json-advanced.js` - Advanced property panel extraction
-- `extract-workflows-batch.js` - Batch processing coordinator
+- `extract-workflow-dropdown.js` - Primary dropdown-based extractor (CURRENT)
 - `test-dropdown-extraction.js` - Test suite for dropdown extraction
 
 ### Library Modules
