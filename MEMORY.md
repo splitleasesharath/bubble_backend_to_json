@@ -85,6 +85,215 @@ This document consolidates all knowledge and context gained throughout the devel
    - Problem: Options load dynamically
    - Solution: Wait for options to populate before selection
 
+## Chrome Persistent State Storage Management
+
+### Overview
+
+The project uses Playwright's persistent context feature to maintain Chrome browser state across sessions, eliminating the need for repeated authentication and preserving user preferences, cookies, and local storage.
+
+### Implementation Details
+
+1. **Profile Location**:
+   ```javascript
+   profilePath: require('path').join(__dirname, '..', 'browser-profiles', 'default')
+   ```
+   - Stored in `browser-profiles/default/` directory
+   - Contains complete Chrome user data directory structure
+   - Excluded from git via `.gitignore` for security
+
+2. **Persistent Context Launch**:
+   ```javascript
+   const browser = await chromium.launchPersistentContext(
+     BROWSER_CONFIG.profilePath,
+     {
+       channel: 'chrome',
+       headless: false,
+       viewport: { width: 1920, height: 1080 }
+     }
+   );
+   ```
+
+3. **Data Persisted**:
+   - **Cookies**: Session cookies for Bubble.io authentication
+   - **Local Storage**: User preferences and app state
+   - **IndexedDB**: Application data and caches
+   - **Session Storage**: Temporary session data
+   - **Service Workers**: Offline functionality and caches
+   - **Extensions**: Any installed Chrome extensions (if applicable)
+
+### Profile Directory Structure
+
+```
+browser-profiles/
+└── default/
+    ├── Default/
+    │   ├── Cookies
+    │   ├── Local Storage/
+    │   ├── IndexedDB/
+    │   ├── Session Storage/
+    │   ├── Cache/
+    │   ├── Code Cache/
+    │   └── Preferences
+    ├── First Run
+    └── Local State
+```
+
+### Key Benefits
+
+1. **Session Persistence**:
+   - No need to re-authenticate for each extraction session
+   - Maintains logged-in state for weeks/months
+   - Preserves 2FA authentication if enabled
+
+2. **Performance Optimization**:
+   - Cached resources load faster
+   - Reduced API calls for authentication
+   - Faster page loads due to cached assets
+
+3. **State Consistency**:
+   - User preferences maintained
+   - Recent activity preserved
+   - Form data and inputs saved
+
+### Management Best Practices
+
+1. **Initial Setup**:
+   ```bash
+   # First run - manual login required
+   node extract-workflow-dropdown.js
+   # Browser opens, manually log into Bubble.io
+   # Close browser when done - session saved automatically
+   ```
+
+2. **Profile Maintenance**:
+   ```bash
+   # Check profile size
+   du -sh browser-profiles/default/
+
+   # Clear cache if needed (preserves cookies)
+   rm -rf browser-profiles/default/Default/Cache/*
+
+   # Full reset (requires re-authentication)
+   rm -rf browser-profiles/default/
+   ```
+
+3. **Multiple Profiles**:
+   ```javascript
+   // For different environments or accounts
+   const profiles = {
+     development: './browser-profiles/dev',
+     production: './browser-profiles/prod',
+     testing: './browser-profiles/test'
+   };
+   ```
+
+### Security Considerations
+
+1. **Sensitive Data**:
+   - Profile contains authentication tokens
+   - May include saved passwords (if Chrome password manager used)
+   - Contains browsing history for the session
+
+2. **Protection Measures**:
+   - Added to `.gitignore` immediately
+   - Never commit to version control
+   - Consider encryption for sensitive environments
+   - Regular cleanup of unnecessary data
+
+3. **Access Control**:
+   ```bash
+   # Set appropriate permissions (Unix-like systems)
+   chmod -R 700 browser-profiles/
+   ```
+
+### Troubleshooting Profile Issues
+
+1. **Corrupted Profile**:
+   ```bash
+   # Symptoms: Browser crashes, login loops
+   # Solution: Reset profile
+   mv browser-profiles/default browser-profiles/default.backup
+   # Run script to create new profile
+   ```
+
+2. **Session Expiration**:
+   ```javascript
+   // Add session validation
+   async function validateSession(page) {
+     try {
+       await page.goto('https://bubble.io/page?id=upgradefromstr');
+       const loginButton = await page.$('button[contains(text(), "Log in")]');
+       return !loginButton; // Session valid if no login button
+     } catch (error) {
+       return false;
+     }
+   }
+   ```
+
+3. **Profile Migration**:
+   ```bash
+   # Backup existing profile
+   tar -czf profile-backup.tar.gz browser-profiles/default/
+
+   # Restore on new machine
+   tar -xzf profile-backup.tar.gz
+   ```
+
+### Advanced Configuration
+
+1. **Custom User Agent**:
+   ```javascript
+   launchOptions: {
+     userAgent: 'Mozilla/5.0 (Custom Extraction Bot)',
+     // ... other options
+   }
+   ```
+
+2. **Proxy Support**:
+   ```javascript
+   launchOptions: {
+     proxy: {
+       server: 'http://proxy-server.com:8080',
+       username: 'user',
+       password: 'pass'
+     }
+   }
+   ```
+
+3. **Profile Isolation**:
+   ```javascript
+   // Create isolated profile for each workflow
+   const isolatedProfile = `./browser-profiles/workflow-${workflowId}`;
+   ```
+
+### Monitoring and Debugging
+
+1. **Profile Health Check**:
+   ```javascript
+   async function checkProfileHealth() {
+     const profilePath = BROWSER_CONFIG.profilePath;
+     const stats = {
+       exists: fs.existsSync(profilePath),
+       size: getDirectorySize(profilePath),
+       lastModified: fs.statSync(profilePath).mtime,
+       cookiesValid: await validateCookies()
+     };
+     return stats;
+   }
+   ```
+
+2. **Debug Logging**:
+   ```javascript
+   // Enable Playwright debugging
+   DEBUG=pw:api node extract-workflow-dropdown.js
+
+   // Chrome DevTools Protocol
+   launchOptions: {
+     devtools: true,
+     slowMo: 100 // Slow down operations for debugging
+   }
+   ```
+
 ## Implementation Patterns
 
 ### Successful Extraction Flow
