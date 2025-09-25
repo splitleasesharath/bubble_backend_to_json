@@ -510,6 +510,52 @@ class DropdownWorkflowExtractor {
         return stepDetails;
     }
 
+    async combineAllWorkflowFiles() {
+        console.log('\n📚 Combining all workflow files into single JSON...');
+
+        try {
+            const files = await fs.readdir(this.outputDir);
+            const workflowFiles = files.filter(f =>
+                f.endsWith('.json') &&
+                !['combined-workflows-dropdown.json', 'dropdown-structure.json',
+                 'RUN_SUMMARY.json', 'ALL_WORKFLOWS_COMBINED.json'].includes(f)
+            );
+
+            const allWorkflows = [];
+
+            for (const file of workflowFiles) {
+                const filePath = path.join(this.outputDir, file);
+                const content = await fs.readFile(filePath, 'utf8');
+                const workflow = JSON.parse(content);
+                allWorkflows.push(workflow);
+            }
+
+            const combinedData = {
+                extraction_metadata: {
+                    run_timestamp: this.timestamp,
+                    total_workflows: allWorkflows.length,
+                    total_steps: allWorkflows.reduce((sum, w) => sum + (w.steps?.length || 0), 0),
+                    combined_at: new Date().toISOString(),
+                    source_directory: path.basename(this.outputDir)
+                },
+                workflows: allWorkflows.sort((a, b) =>
+                    a.workflow_name.localeCompare(b.workflow_name)
+                )
+            };
+
+            const combinedPath = path.join(this.outputDir, 'ALL_WORKFLOWS_COMBINED.json');
+            await fs.writeFile(combinedPath, JSON.stringify(combinedData, null, 2));
+
+            console.log(`  ✅ Combined ${allWorkflows.length} workflows into ALL_WORKFLOWS_COMBINED.json`);
+            console.log(`  📊 Total size: ${(JSON.stringify(combinedData).length / 1024 / 1024).toFixed(2)} MB`);
+
+            return combinedData;
+        } catch (error) {
+            console.log(`  ⚠️ Failed to combine workflow files: ${error.message}`);
+            return null;
+        }
+    }
+
     async run() {
         const { browser, page } = await launchBrowserWithSession();
 
@@ -611,9 +657,15 @@ class DropdownWorkflowExtractor {
             const summaryPath = path.join(this.outputDir, 'RUN_SUMMARY.json');
             await fs.writeFile(summaryPath, JSON.stringify(summary, null, 2));
 
+            // Combine all individual workflow files
+            const combinedData = await this.combineAllWorkflowFiles();
+
             console.log('\n=== Dropdown Extraction Complete ===');
             console.log(`Total workflows processed: ${results.workflows.length}`);
             console.log(`Total steps extracted: ${results.total_steps}`);
+            if (combinedData) {
+                console.log(`Combined file created: ALL_WORKFLOWS_COMBINED.json`);
+            }
             console.log(`Timestamp: ${this.timestamp}`);
             console.log(`Output directory: ${this.outputDir}`);
 
