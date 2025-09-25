@@ -30,6 +30,13 @@ workflow-analysis.json
 workflow-page-full.html
 workflow-structure.png
 
+# Extraction output directories
+extracted-workflows/
+extracted-workflows-*/
+output-*/
+Deprecated/extracted-workflows/
+Deprecated/extracted-workflows-*/
+
 # CSV and JSON data files
 *.csv
 *.json

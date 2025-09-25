@@ -1,0 +1,14 @@
+# Google Drive API dependencies
+google-api-python-client==2.97.0
+google-auth==2.23.0
+google-auth-httplib2==0.1.0
+google-auth-oauthlib==1.0.0
+
+# CLI and utilities
+python-dotenv==1.0.0
+colorama==0.4.6
+tqdm==4.66.1
+
+# Core dependencies
+requests==2.31.0
+urllib3==2.0.4
