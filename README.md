@@ -89,7 +89,32 @@ python main.py auth
 
 ## Usage
 
-### Dropdown-Based Extraction (Recommended)
+### Quick Start (Windows)
+
+#### Option 1: Double-Click Extraction
+Simply double-click `EXTRACT-WORKFLOWS.bat` to run full extraction with GitHub upload.
+
+#### Option 2: Interactive Menu
+Run `run-extraction.bat` for an interactive menu with multiple options:
+- Full extraction with GitHub upload
+- Test extraction (2 workflows only)
+- Test GitHub integration
+- Check previous extraction results
+- Install/update dependencies
+
+#### Option 3: PowerShell (Advanced)
+```powershell
+# Run with menu
+.\run-extraction.ps1
+
+# Direct execution
+.\run-extraction.ps1 -Mode full              # Full extraction
+.\run-extraction.ps1 -Mode test              # Test extraction
+.\run-extraction.ps1 -Mode full -MaxWorkflows 10  # Limited extraction
+.\run-extraction.ps1 -Mode full -SkipGitHub  # Skip GitHub upload
+```
+
+### Command Line Usage
 
 Extract workflows using the dropdown navigation method:
 
