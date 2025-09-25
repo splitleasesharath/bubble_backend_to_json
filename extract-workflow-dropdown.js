@@ -2,6 +2,7 @@ const { launchBrowserWithSession, BROWSER_CONFIG } = require('./config/browser-c
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 /**
  * Dropdown-based Workflow Extractor
@@ -549,11 +550,53 @@ class DropdownWorkflowExtractor {
             console.log(`  ✅ Combined ${allWorkflows.length} workflows into ALL_WORKFLOWS_COMBINED.json`);
             console.log(`  📊 Total size: ${(JSON.stringify(combinedData).length / 1024 / 1024).toFixed(2)} MB`);
 
-            return combinedData;
+            // Return both the data and the file path for GitHub upload
+            return {
+                data: combinedData,
+                filePath: combinedPath
+            };
         } catch (error) {
             console.log(`  ⚠️ Failed to combine workflow files: ${error.message}`);
             return null;
         }
+    }
+
+    async pushToGitHub(filePath) {
+        console.log('\n🚀 Pushing combined workflows to GitHub logs repository...');
+
+        return new Promise((resolve, reject) => {
+            const githubLoggerPath = path.join(__dirname, 'github-logger', 'github-logger.js');
+
+            // Custom commit message with extraction details
+            const commitMessage = `Add Bubble backend workflows extraction - ${this.timestamp}`;
+
+            // Spawn the github-logger process
+            const githubProcess = spawn('node', [
+                githubLoggerPath,
+                filePath,
+                '--message',
+                commitMessage
+            ], {
+                cwd: path.join(__dirname, 'github-logger'),
+                env: { ...process.env },
+                stdio: 'inherit' // Show the output directly
+            });
+
+            githubProcess.on('close', (code) => {
+                if (code === 0) {
+                    console.log('  ✅ Successfully pushed to GitHub logs repository');
+                    resolve(true);
+                } else {
+                    console.log(`  ⚠️ Failed to push to GitHub (exit code: ${code})`);
+                    resolve(false); // Don't reject to avoid stopping the extraction
+                }
+            });
+
+            githubProcess.on('error', (error) => {
+                console.log(`  ⚠️ Error running GitHub logger: ${error.message}`);
+                resolve(false); // Don't reject to avoid stopping the extraction
+            });
+        });
     }
 
     async run() {
@@ -658,12 +701,17 @@ class DropdownWorkflowExtractor {
             await fs.writeFile(summaryPath, JSON.stringify(summary, null, 2));
 
             // Combine all individual workflow files
-            const combinedData = await this.combineAllWorkflowFiles();
+            const combinedResult = await this.combineAllWorkflowFiles();
+
+            // Push to GitHub if combination was successful
+            if (combinedResult && combinedResult.filePath) {
+                await this.pushToGitHub(combinedResult.filePath);
+            }
 
             console.log('\n=== Dropdown Extraction Complete ===');
             console.log(`Total workflows processed: ${results.workflows.length}`);
             console.log(`Total steps extracted: ${results.total_steps}`);
-            if (combinedData) {
+            if (combinedResult) {
                 console.log(`Combined file created: ALL_WORKFLOWS_COMBINED.json`);
             }
             console.log(`Timestamp: ${this.timestamp}`);

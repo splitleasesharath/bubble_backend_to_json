@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# Node modules
+node_modules/
+
+# Personal configuration (keep only example)
+# config.json is tracked but should be updated by user
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
