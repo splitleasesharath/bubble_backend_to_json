@@ -94,8 +94,8 @@ python main.py auth
 #### Option 1: Double-Click Extraction
 Simply double-click `EXTRACT-WORKFLOWS.bat` to run full extraction with GitHub upload.
 
-#### Option 2: Interactive Menu
-Run `run-extraction.bat` for an interactive menu with multiple options:
+#### Option 2: Control Panel (Interactive Menu)
+Run `extraction-control-panel.bat` for an interactive menu with multiple options:
 - Full extraction with GitHub upload
 - Test extraction (2 workflows only)
 - Test GitHub integration
